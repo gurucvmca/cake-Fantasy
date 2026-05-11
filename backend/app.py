@@ -20,7 +20,7 @@ app = Flask(
     template_folder=os.path.join(FRONTEND_DIR, "templates"),
     static_folder=os.path.join(FRONTEND_DIR, "static")
 )
-app.secret_key = "cakeshop_secret_2026"
+app.secret_key = os.environ.get("SECRET_KEY", "cakeshop_secret_default_2026")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB max upload
 
@@ -40,8 +40,8 @@ cakes  = db["cakes"]
 
 
 # ---------------- RAZORPAY ----------------
-RZP_KEY_ID = "rzp_test_placeholderID"
-RZP_KEY_SECRET = "rzp_test_placeholderSecret"
+RZP_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_placeholderID")
+RZP_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "rzp_test_placeholderSecret")
 rzp_client = razorpay.Client(auth=(RZP_KEY_ID, RZP_KEY_SECRET))
 
 print("[OK] MongoDB connected & Razorpay Initialized")
