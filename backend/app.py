@@ -31,7 +31,8 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)  # Auto-expire 
 
 
 # ---------------- MONGODB ----------------
-client = MongoClient("mongodb://127.0.0.1:27017/")
+MONGO_URI = os.environ.get("MONGODB_URI", "mongodb://127.0.0.1:27017/")
+client = MongoClient(MONGO_URI)
 db = client["cakeshop"]
 users  = db["users"]
 orders = db["orders"]
@@ -359,4 +360,5 @@ def admin_delete_cake(cake_id):
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
