@@ -3,3 +3,5 @@ pymongo
 razorpay
 werkzeug
 gunicorn
+python-dotenv
+dnspython
