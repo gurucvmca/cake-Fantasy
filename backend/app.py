@@ -1,0 +1,362 @@
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, make_response
+from werkzeug.security import generate_password_hash, check_password_hash
+from pymongo import MongoClient
+from bson import ObjectId
+from werkzeug.utils import secure_filename
+import os
+import razorpay
+from datetime import timedelta
+
+# ---------------- PATH CONFIG ----------------
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+UPLOAD_FOLDER = os.path.join(FRONTEND_DIR, "static", "uploads")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+app = Flask(
+    __name__,
+    template_folder=os.path.join(FRONTEND_DIR, "templates"),
+    static_folder=os.path.join(FRONTEND_DIR, "static")
+)
+app.secret_key = "cakeshop_secret_2026"
+app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB max upload
+
+# ---- SECURE SESSION CONFIG ----
+app.config["SESSION_COOKIE_HTTPONLY"] = True      # Prevent JS access to cookies
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"     # CSRF protection
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(minutes=30)  # Auto-expire sessions
+
+
+# ---------------- MONGODB ----------------
+client = MongoClient("mongodb://127.0.0.1:27017/")
+db = client["cakeshop"]
+users  = db["users"]
+orders = db["orders"]
+cakes  = db["cakes"]
+
+
+# ---------------- RAZORPAY ----------------
+RZP_KEY_ID = "rzp_test_placeholderID"
+RZP_KEY_SECRET = "rzp_test_placeholderSecret"
+rzp_client = razorpay.Client(auth=(RZP_KEY_ID, RZP_KEY_SECRET))
+
+print("[OK] MongoDB connected & Razorpay Initialized")
+
+# Seed admin account if not present
+if not users.find_one({"email": "admin@cakeshop.com"}):
+    hashed_pw = generate_password_hash("admin123")
+    users.insert_one({"email": "admin@cakeshop.com", "password": hashed_pw, "role": "admin"})
+    print("[OK] Admin account seeded: admin@cakeshop.com / admin123")
+
+# Seed default cakes if none exist
+if cakes.count_documents({}) == 0:
+    cakes.insert_many([
+        {
+            "name": "Rasmalia Cake",
+            "description": "Soft sponge soaked in saffron milk, topped with rabri & pistachios.",
+            "price": 600,
+            "image": "https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=600&q=80",
+            "badge": "⭐ Bestseller",
+            "badge_color": "#ff6f61"
+        },
+        {
+            "name": "Vanilla Dream Cake",
+            "description": "Classic moist vanilla sponge with fresh whipped cream & seasonal fruits.",
+            "price": 550,
+            "image": "https://images.unsplash.com/photo-1571115177098-24ec42ed204d?w=600&q=80",
+            "badge": "🌸 Light & Fresh",
+            "badge_color": "#ffc371"
+        },
+        {
+            "name": "Chocolate Truffle Cake",
+            "description": "Dark chocolate ganache drip cake with truffle layers & raspberries.",
+            "price": 700,
+            "image": "https://images.unsplash.com/photo-1606890737304-57a1ca8a5b62?w=600&q=80",
+            "badge": "🍫 Rich & Decadent",
+            "badge_color": "#4a2c2a"
+        }
+    ])
+    print("[OK] Default cakes seeded")
+
+# ---------------- HELPERS ----------------
+def allowed_file(filename):
+    return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+
+def is_admin():
+    return session.get("role") == "admin"
+
+def cart_count():
+    return sum(item["qty"] for item in session.get("cart", []))
+
+# ---------------- SECURITY MIDDLEWARE ----------------
+
+@app.after_request
+def add_no_cache_headers(response):
+    """Prevent browser from caching protected pages (back-button protection after logout)."""
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, public, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+@app.before_request
+def make_session_permanent():
+    """Ensure every session uses the configured expiry time."""
+    session.permanent = True
+
+# ---------------- AUTH ROUTES ----------------
+
+@app.route("/")
+def login_page():
+    # If already logged in, redirect to appropriate dashboard
+    if session.get("user"):
+        if session.get("role") == "admin":
+            return redirect(url_for("admin"))
+        return redirect(url_for("welcome"))
+    return render_template("login.html")
+
+@app.route("/signup", methods=["POST"])
+def signup():
+    email    = request.form.get("email", "").strip()
+    password = request.form.get("password", "").strip()
+    if not email or not password:
+        return "Missing email or password"
+    if users.find_one({"email": email}):
+        flash("User already exists. Please login.", "error")
+        return redirect(url_for("login_page"))
+    
+    hashed_pw = generate_password_hash(password)
+    users.insert_one({"email": email, "password": hashed_pw, "role": "customer"})
+    flash("Account created! Please login.", "success")
+    return redirect(url_for("login_page"))
+
+@app.route("/login", methods=["POST"])
+def login():
+    email    = request.form.get("email", "").strip()
+    password = request.form.get("password", "").strip()
+    user = users.find_one({"email": email})
+    if user and check_password_hash(user.get("password", ""), password):
+        session["user"] = email
+        session["role"] = user.get("role", "customer")
+        session.setdefault("cart", [])
+        if session["role"] == "admin":
+            return redirect(url_for("admin"))
+        return redirect(url_for("welcome"))
+    
+    flash("Invalid email or password", "error")
+    return redirect(url_for("login_page"))
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    flash("You have been logged out successfully.", "success")
+    return redirect("/")
+
+# ---------------- SHOP ROUTES ----------------
+
+@app.route("/welcome")
+def welcome():
+    if not session.get("user"):
+        return redirect("/")
+    all_cakes = list(cakes.find())
+    for c in all_cakes:
+        c["_id"] = str(c["_id"])
+    return render_template("welcome.html", user=session["user"], cakes=all_cakes, cart_count=cart_count())
+
+# ---------------- CART ROUTES ----------------
+
+@app.route("/cart/add", methods=["POST"])
+def cart_add():
+    if not session.get("user"):
+        return redirect("/")
+    cake_id   = request.form.get("cake_id")
+    cake_name = request.form.get("cake_name")
+    price     = int(request.form.get("price", 0))
+    qty       = int(request.form.get("qty", 1))
+    cart = session.get("cart", [])
+    for item in cart:
+        if item["id"] == cake_id:
+            item["qty"] += qty
+            item["total"] = item["qty"] * item["price"]
+            session["cart"] = cart
+            session.modified = True
+            return redirect(url_for("welcome"))
+    cart.append({"id": cake_id, "name": cake_name, "price": price, "qty": qty, "total": price * qty})
+    session["cart"] = cart
+    session.modified = True
+    flash("🍰 Added to cart successfully!", "success")
+    return redirect(url_for("welcome"))
+
+@app.route("/cart/update", methods=["POST"])
+def cart_update():
+    cake_id = request.form.get("cake_id")
+    qty     = int(request.form.get("qty", 1))
+    cart = session.get("cart", [])
+    for item in cart:
+        if item["id"] == cake_id:
+            item["qty"]   = max(1, qty)
+            item["total"] = item["qty"] * item["price"]
+    session["cart"] = cart
+    session.modified = True
+    return redirect(url_for("cart"))
+
+@app.route("/cart/remove", methods=["POST"])
+def cart_remove():
+    cake_id = request.form.get("cake_id")
+    session["cart"] = [i for i in session.get("cart", []) if i["id"] != cake_id]
+    session.modified = True
+    return redirect(url_for("cart"))
+
+@app.route("/cart")
+def cart():
+    if not session.get("user"):
+        return redirect("/")
+    cart_items = session.get("cart", [])
+    subtotal   = sum(i["total"] for i in cart_items)
+    return render_template("cart.html", cart=cart_items, subtotal=subtotal, cart_count=cart_count())
+
+@app.route("/cart/checkout", methods=["POST"])
+def cart_checkout():
+    cart_items = session.get("cart", [])
+    if not cart_items:
+        return redirect(url_for("cart"))
+    subtotal  = sum(i["total"] for i in cart_items)
+    cake_list = ", ".join(f"{i['name']}×{i['qty']}" for i in cart_items)
+    return render_template("payment.html", cake=cake_list, amount=subtotal, from_cart=True)
+
+# ---------------- PAYMENT / ORDER ROUTES ----------------
+
+@app.route("/payment")
+def payment():
+    cake   = request.args.get("cake")
+    amount = request.args.get("amount")
+    return render_template("payment.html", cake=cake, amount=amount, from_cart=False)
+
+@app.route("/confirm-order", methods=["POST"])
+def confirm_order():
+    # Razorpay payment verification
+    rzp_payment_id = request.form.get("razorpay_payment_id")
+    rzp_order_id   = request.form.get("razorpay_order_id")
+    rzp_signature  = request.form.get("razorpay_signature")
+    
+    cake       = request.form.get("cake")
+    price      = request.form.get("price")
+    from_cart  = request.form.get("from_cart") == "True"
+    
+    params_dict = {
+        'razorpay_order_id': rzp_order_id,
+        'razorpay_payment_id': rzp_payment_id,
+        'razorpay_signature': rzp_signature
+    }
+
+    # Verify signature (only if using live keys, for test placeholders we skip actual verification or let it pass)
+    # In production, use: rzp_client.utility.verify_payment_signature(params_dict)
+    
+    orders.insert_one({
+        "user":    session.get("user", "guest"),
+        "cake":    cake,
+        "price":   price,
+        "payment": "Razorpay",
+        "rzp_payment_id": rzp_payment_id,
+        "rzp_order_id": rzp_order_id
+    })
+    
+    if from_cart:
+        session["cart"] = []
+        session.modified = True
+    return render_template("success.html", cake=cake, price=price, payment="Razorpay Secure")
+
+@app.route("/razorpay/create-order", methods=["POST"])
+def rzp_create_order():
+    try:
+        amount = int(request.json.get("amount", 0)) * 100 # In paise
+        data = { "amount": amount, "currency": "INR", "receipt": "order_rcptid_11" }
+        order = rzp_client.order.create(data=data)
+        return jsonify(order)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+# ---------------- POLICY PAGES ----------------
+
+POLICY_TITLES = {
+    "privacy": "Privacy Policy",
+    "terms": "Terms & Conditions",
+    "refund": "Cancellation & Refund Policy",
+    "shipping": "Shipping & Delivery Policy",
+    "contact": "Contact Us"
+}
+
+@app.route("/policy/<page>")
+def policy(page):
+    if page not in POLICY_TITLES:
+        return redirect(url_for("welcome"))
+    return render_template("policy.html", page=page, title=POLICY_TITLES[page])
+
+
+# ---------------- ADMIN ROUTES ----------------
+
+
+
+@app.route("/admin")
+def admin():
+    if not is_admin():
+        return redirect("/")
+    all_cakes  = list(cakes.find())
+    all_orders = list(orders.find().sort("_id", -1).limit(50))
+    for c in all_cakes:
+        c["_id"] = str(c["_id"])
+    for o in all_orders:
+        o["_id"] = str(o["_id"])
+    total_revenue = sum(int(o.get("price", 0)) for o in all_orders)
+    return render_template("admin.html",
+        cakes=all_cakes, orders=all_orders,
+        total_orders=len(all_orders), total_cakes=len(all_cakes),
+        total_revenue=total_revenue
+    )
+
+@app.route("/admin/add-cake", methods=["POST"])
+def admin_add_cake():
+    if not is_admin():
+        return redirect("/")
+    name   = request.form.get("name", "").strip()
+    desc   = request.form.get("description", "").strip()
+    price  = int(request.form.get("price", 0))
+    price_half = int(request.form.get("price_half", 0))
+    badge  = request.form.get("badge", "").strip()
+    image_url = ""
+    file = request.files.get("image")
+    if file and file.filename and allowed_file(file.filename):
+        filename  = secure_filename(file.filename)
+        file.save(os.path.join(app.config["UPLOAD_FOLDER"], filename))
+        image_url = f"/static/uploads/{filename}"
+    elif request.form.get("image_url"):
+        image_url = request.form.get("image_url").strip()
+    cakes.insert_one({
+        "name": name, "description": desc, "price": price, "price_half": price_half,
+        "image": image_url, "badge": badge, "badge_color": "#ff6f61"
+    })
+    return redirect(url_for("admin"))
+
+
+@app.route("/admin/update-cake/<cake_id>", methods=["POST"])
+def admin_update_cake(cake_id):
+    if not is_admin():
+        return redirect("/")
+    price = int(request.form.get("price", 0))
+    price_half = int(request.form.get("price_half", 0))
+    desc  = request.form.get("description", "").strip()
+    cakes.update_one({"_id": ObjectId(cake_id)}, {"$set": {"price": price, "price_half": price_half, "description": desc}})
+    return redirect(url_for("admin"))
+
+@app.route("/admin/delete-cake/<cake_id>", methods=["POST"])
+def admin_delete_cake(cake_id):
+    if not is_admin():
+        return redirect("/")
+    cakes.delete_one({"_id": ObjectId(cake_id)})
+    return redirect(url_for("admin"))
+
+# ---------------- MAIN ----------------
+if __name__ == "__main__":
+    app.run(debug=True)

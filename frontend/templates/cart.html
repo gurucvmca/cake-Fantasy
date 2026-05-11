@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Your Basket — Cake Shop</title>
+  <link rel="stylesheet" href="/static/shop.css">
+  <style>
+    .cart-page { min-height: 100vh; }
+
+    .cart-layout {
+      max-width: 1200px;
+      margin: 40px auto;
+      padding: 0 5%;
+      display: grid;
+      grid-template-columns: 1fr 380px;
+      gap: 35px;
+      align-items: start;
+    }
+
+    .cart-panel {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border-radius: var(--radius);
+      padding: 35px;
+      border: 1px solid var(--glass-border);
+    }
+
+    .panel-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--white);
+      margin-bottom: 25px;
+    }
+
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 18px 0;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .cart-item:last-child { border-bottom: none; }
+
+    .cart-item-img {
+      width: 90px; height: 90px;
+      object-fit: cover;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border);
+    }
+
+    .cart-item-info { flex: 1; }
+    .cart-item-info h4 { font-size: 1rem; font-weight: 700; color: var(--white); margin-bottom: 4px; }
+    .cart-item-info .unit-price { font-size: 0.82rem; color: var(--text-muted); }
+
+    .cart-item-qty {
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--glass-border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: rgba(255,255,255,0.03);
+    }
+    .cart-item-qty button {
+      width: 32px; height: 32px;
+      border: none; background: transparent;
+      font-weight: 800; color: var(--primary-light);
+      cursor: pointer; transition: 0.2s;
+    }
+    .cart-item-qty button:hover { background: var(--primary); color: white; }
+    .cart-item-qty .qty-display { width: 36px; text-align: center; font-weight: 700; font-size: 0.85rem; color: var(--white); }
+
+    .cart-item-total { font-size: 1.1rem; font-weight: 800; color: var(--accent); min-width: 80px; text-align: right; }
+
+    .btn-remove {
+      background: rgba(232,54,79,0.1); border: none;
+      width: 30px; height: 30px; border-radius: 50%;
+      color: var(--primary-light); cursor: pointer;
+      font-weight: 800; transition: var(--transition);
+    }
+    .btn-remove:hover { background: var(--primary); color: white; transform: rotate(90deg); }
+
+    .summary-row { display: flex; justify-content: space-between; padding: 10px 0; font-size: 0.92rem; }
+    .summary-total { margin-top: 15px; padding-top: 15px; border-top: 1px dashed var(--glass-border); }
+    .summary-total .val { font-size: 1.6rem; font-weight: 800; color: var(--accent); font-family: 'Playfair Display', serif; }
+
+    .btn-checkout {
+      width: 100%; padding: 16px;
+      background: linear-gradient(135deg, var(--primary), var(--accent2));
+      color: white; border: none; border-radius: 50px;
+      font-size: 1rem; font-weight: 800; cursor: pointer;
+      margin-top: 20px; box-shadow: 0 8px 25px rgba(232,54,79,0.3);
+      transition: var(--transition);
+    }
+    .btn-checkout:hover { transform: translateY(-3px); box-shadow: 0 14px 35px rgba(232,54,79,0.4); }
+
+    @media (max-width: 992px) { .cart-layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body class="cart-page">
+
+<nav class="navbar">
+  <div class="nav-logo"><span class="logo-icon">🍰</span><span>Cake Shop</span></div>
+  <ul class="nav-links">
+    <li><a href="/welcome">Home</a></li>
+    <li><a href="/welcome#menu">Collection</a></li>
+  </ul>
+  <div class="nav-right">
+    <a href="/cart" class="cart-icon-wrap">🛒<span class="cart-count">{{ cart_count }}</span></a>
+    <a class="nav-logout" href="/logout">Logout</a>
+  </div>
+</nav>
+
+{% if cart %}
+<div class="cart-layout">
+  <div class="cart-panel">
+    <div class="panel-title">Your Selection ({{ cart|length }} item{{ 's' if cart|length != 1 else '' }})</div>
+    {% for item in cart %}
+    <div class="cart-item">
+      <img src="https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=200&q=80" class="cart-item-img" alt="{{ item.name }}">
+      <div class="cart-item-info">
+        <h4>{{ item.name }}</h4>
+        <div class="unit-price">₹{{ item.price }} / kg</div>
+        <form action="/cart/update" method="post" style="margin-top:10px;">
+          <input type="hidden" name="cake_id" value="{{ item.id }}">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="cart-item-qty">
+              <button type="submit" name="qty" value="{{ item.qty - 1 if item.qty > 1 else 1 }}">−</button>
+              <span class="qty-display">{{ item.qty }}</span>
+              <button type="submit" name="qty" value="{{ item.qty + 1 }}">+</button>
+            </div>
+            <span style="font-size:0.75rem; color:var(--text-muted);">kg</span>
+          </div>
+        </form>
+      </div>
+      <div class="cart-item-total">₹{{ item.total }}</div>
+      <form action="/cart/remove" method="post">
+        <input type="hidden" name="cake_id" value="{{ item.id }}">
+        <button type="submit" class="btn-remove" title="Remove">✕</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div>
+    <div class="cart-panel">
+      <div class="panel-title">Summary</div>
+      <div class="summary-row"><span style="color:var(--text-muted);">Subtotal</span><span style="font-weight:700;">₹{{ subtotal }}</span></div>
+      <div class="summary-row"><span style="color:var(--text-muted);">Delivery</span><span style="color:#6BCB77; font-weight:800;">FREE</span></div>
+      <div class="summary-row summary-total"><span style="font-weight:800;">Total</span><span class="val">₹{{ subtotal }}</span></div>
+      <form action="/cart/checkout" method="post">
+        <button type="submit" class="btn-checkout">Secure Checkout</button>
+      </form>
+      <a href="/welcome" style="display:block; text-align:center; margin-top:18px; font-size:0.82rem; color:var(--primary-light); font-weight:600;">Add More Treats</a>
+    </div>
+    <div class="cart-panel" style="margin-top:16px; padding:22px;">
+      <div style="display:grid; gap:12px; font-size:0.82rem; font-weight:600; color:var(--text-muted);">
+        <div>🛡️ Fresh & Organic Guarantee</div>
+        <div>🚚 Temperature Controlled Delivery</div>
+        <div>💳 256-bit Encrypted Payment</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div style="max-width:480px; margin:100px auto; padding:0 5%;">
+  <div class="cart-panel" style="text-align:center;">
+    <div style="font-size:4rem; margin-bottom:20px;">🛒</div>
+    <h2 style="color:var(--white); margin-bottom:10px; font-family:'Playfair Display',serif;">Your basket is empty</h2>
+    <p style="color:var(--text-muted); margin-bottom:25px;">Discover our artisan collection.</p>
+    <a href="/welcome" class="btn-primary" style="text-decoration:none;">Shop Collection</a>
+  </div>
+</div>
+{% endif %}
+</body>
+</html>

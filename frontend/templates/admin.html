@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard — Cake Fantasy</title>
+  <link rel="stylesheet" href="/static/shop.css">
+  <style>
+    .admin-page { min-height: 100vh; }
+
+    .stats-container {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 25px;
+      padding: 45px 8%;
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+    .stat-card {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 30px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      transition: var(--transition);
+    }
+    .stat-card:hover { transform: translateY(-5px); box-shadow: var(--shadow-md); border-color: rgba(232,54,79,0.2); }
+    .stat-card .icon {
+      width: 55px; height: 55px;
+      background: rgba(232,54,79,0.1);
+      border-radius: var(--radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.6rem;
+    }
+    .stat-card .val { font-size: 1.8rem; font-weight: 900; color: var(--white); font-family: 'Playfair Display', serif; }
+    .stat-card .lbl { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; letter-spacing: 1px; }
+
+    .admin-grid {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 25px;
+      padding: 0 8% 80px;
+      max-width: 1300px;
+      margin: 0 auto;
+    }
+
+    .admin-panel {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 35px;
+    }
+    .panel-header {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.2rem; font-weight: 800; color: var(--white);
+      margin-bottom: 25px; display: flex; align-items: center; gap: 10px;
+    }
+
+    .form-group { margin-bottom: 18px; }
+    .form-group label {
+      display: block; font-size: 0.75rem; font-weight: 700;
+      color: var(--text-muted); margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.8px;
+    }
+    .form-group input, .form-group textarea {
+      width: 100%; padding: 12px 14px; border-radius: var(--radius-sm);
+      border: 1px solid var(--glass-border); outline: none;
+      background: rgba(255,255,255,0.03); color: var(--white);
+      font-family: 'Inter', sans-serif; font-size: 0.88rem;
+      transition: 0.3s;
+    }
+    .form-group input::placeholder, .form-group textarea::placeholder { color: rgba(255,255,255,0.2); }
+    .form-group input:focus, .form-group textarea:focus { border-color: var(--primary); background: rgba(232,54,79,0.04); }
+    .form-group textarea { min-height: 70px; resize: vertical; }
+
+    .btn-publish {
+      width: 100%; padding: 14px;
+      background: linear-gradient(135deg, var(--primary), var(--accent2));
+      color: white; border: none; border-radius: 50px;
+      font-weight: 800; font-size: 0.95rem; cursor: pointer;
+      box-shadow: 0 8px 25px rgba(232,54,79,0.3);
+      transition: var(--transition);
+    }
+    .btn-publish:hover { transform: translateY(-2px); box-shadow: 0 14px 35px rgba(232,54,79,0.4); }
+
+    /* Tabs */
+    .tab-nav {
+      display: flex; gap: 8px; margin-bottom: 25px;
+      background: rgba(255,255,255,0.03); padding: 5px; border-radius: var(--radius-sm);
+    }
+    .tab-btn {
+      flex: 1; padding: 11px; border: none;
+      background: transparent; border-radius: 10px;
+      font-weight: 700; cursor: pointer;
+      color: var(--text-muted); font-size: 0.85rem;
+      transition: 0.3s; font-family: 'Inter', sans-serif;
+    }
+    .tab-btn.active {
+      background: rgba(255,255,255,0.06);
+      color: var(--white);
+      border: 1px solid var(--glass-border);
+    }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Cake list */
+    .cake-list-item {
+      display: flex; align-items: center; gap: 15px;
+      padding: 14px 0; border-bottom: 1px solid var(--glass-border);
+    }
+    .cake-list-item:last-child { border-bottom: none; }
+    .cake-list-item img {
+      width: 48px; height: 48px; object-fit: cover;
+      border-radius: 10px; border: 1px solid var(--glass-border);
+    }
+    .cake-list-item h5 { flex: 1; font-weight: 700; color: var(--white); font-size: 0.9rem; }
+    .price-pill {
+      background: rgba(245,166,35,0.1); color: var(--accent);
+      padding: 4px 12px; border-radius: 50px;
+      font-weight: 800; font-size: 0.8rem;
+      border: 1px solid rgba(245,166,35,0.15);
+    }
+    .btn-delete {
+      background: none; border: none;
+      color: rgba(232,54,79,0.6); cursor: pointer;
+      font-size: 1.1rem; transition: 0.2s; margin-left: 12px;
+    }
+    .btn-delete:hover { color: var(--primary); transform: scale(1.2); }
+
+    /* Orders table */
+    .orders-table { width: 100%; border-collapse: collapse; }
+    .orders-table th {
+      text-align: left; padding: 12px 14px;
+      background: rgba(255,255,255,0.03);
+      font-size: 0.72rem; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.8px;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .orders-table td {
+      padding: 14px; border-bottom: 1px solid var(--glass-border);
+      font-size: 0.88rem; color: var(--text-muted);
+    }
+    .orders-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+    .status-pill {
+      background: rgba(107,203,119,0.1); color: #6BCB77;
+      padding: 3px 10px; border-radius: 50px;
+      font-weight: 700; font-size: 0.7rem;
+      border: 1px solid rgba(107,203,119,0.15);
+    }
+
+  </style>
+
+</head>
+<body class="admin-page">
+
+<nav class="navbar">
+  <div class="nav-logo">
+    <span class="logo-icon">🍰</span>
+    <span>Cake Fantasy</span>
+    <span style="font-size:0.6rem; background:rgba(232,54,79,0.15); color:var(--primary-light); padding:3px 10px; border-radius:10px; margin-left:10px; border:1px solid rgba(232,54,79,0.2);">ADMIN</span>
+  </div>
+  <ul class="nav-links">
+    <li><a href="/welcome">Visit Shop</a></li>
+  </ul>
+  <div class="nav-right">
+    <a class="nav-logout" href="#" onclick="showLogoutModal(); return false;">Log out</a>
+  </div>
+</nav>
+
+<div class="stats-container">
+  <div class="stat-card">
+    <div class="icon">🍰</div>
+    <div><div class="val">{{ total_cakes }}</div><div class="lbl">Cakes</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="icon">📦</div>
+    <div><div class="val">{{ total_orders }}</div><div class="lbl">Orders</div></div>
+  </div>
+  <div class="stat-card">
+    <div class="icon">💰</div>
+    <div><div class="val">₹{{ total_revenue }}</div><div class="lbl">Revenue</div></div>
+  </div>
+</div>
+
+<div class="admin-grid">
+  <!-- ADD CAKE -->
+  <div class="admin-panel">
+    <div class="panel-header">✨ Add Masterpiece</div>
+    <form action="/admin/add-cake" method="post" enctype="multipart/form-data">
+      <div class="form-group"><label>Name</label><input type="text" name="name" required placeholder="Dreamy Chocolate Silk"></div>
+      <div class="form-group"><label>Description</label><textarea name="description" placeholder="Short artisan description..."></textarea></div>
+      <div class="form-group"><label>Price for 1kg (₹)</label><input type="number" name="price" required placeholder="750"></div>
+      <div class="form-group"><label>Price for 0.5kg (₹)</label><input type="number" name="price_half" required placeholder="400"></div>
+
+      <div class="form-group"><label>Badge</label><input type="text" name="badge" placeholder="⭐ Bestseller"></div>
+      <div class="form-group">
+        <label>Photo URL</label>
+        <input type="text" name="image_url" placeholder="Paste image URL...">
+        <div style="margin:10px 0; color:var(--text-muted); font-size:0.72rem; text-align:center;">— OR UPLOAD —</div>
+        <input type="file" name="image" accept="image/*" style="color:var(--text-muted);">
+      </div>
+      <button type="submit" class="btn-publish">Publish Cake</button>
+    </form>
+  </div>
+
+  <!-- MANAGE -->
+  <div class="admin-panel">
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="showTab('tab-cakes', this)">Cakes</button>
+      <button class="tab-btn" onclick="showTab('tab-orders', this)">Live Orders</button>
+    </div>
+
+
+    <div id="tab-cakes" class="tab-content active">
+      {% if cakes %}
+        {% for cake in cakes %}
+        <div class="cake-list-item">
+          <img src="{{ cake.image }}" alt="" onerror="this.src='https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=100&q=80'">
+          <h5>{{ cake.name }}</h5>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <div class="price-pill">1kg: ₹{{ cake.price }}</div>
+            {% if cake.price_half %}
+            <div class="price-pill" style="background:rgba(232,54,79,0.1); color:var(--primary-light); border-color:rgba(232,54,79,0.15);">0.5kg: ₹{{ cake.price_half }}</div>
+            {% endif %}
+          </div>
+          <form action="/admin/delete-cake/{{ cake._id }}" method="post">
+            <button type="submit" class="btn-delete" onclick="return confirm('Delete {{ cake.name }}?')">🗑️</button>
+          </form>
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="text-align:center; padding:40px; color:var(--text-muted);">
+          <div style="font-size:2.5rem; margin-bottom:10px;">🍰</div>
+          No cakes yet. Add one above!
+        </div>
+      {% endif %}
+    </div>
+
+    <div id="tab-orders" class="tab-content">
+      {% if orders %}
+        <div style="overflow-x:auto;">
+          <table class="orders-table">
+            <thead><tr><th>Customer</th><th>Items</th><th>Payment</th><th>Total</th></tr></thead>
+            <tbody>
+              {% for o in orders %}
+              <tr>
+                <td style="font-weight:700; color:var(--white);">{{ o.user }}</td>
+                <td>{{ o.cake }}</td>
+                <td><span class="status-pill">{{ o.payment }}</span></td>
+                <td style="font-weight:800; color:var(--accent);">₹{{ o.price }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div style="text-align:center; padding:40px; color:var(--text-muted);">
+          <div style="font-size:2.5rem; margin-bottom:10px;">📦</div>
+          No orders yet.
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<script>
+  function showTab(id, btn) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    btn.classList.add('active');
+  }
+</script>
+
+<!-- Logout Confirmation Modal -->
+<div id="logoutModal">
+  <div class="logout-box">
+    <div class="logout-icon">🔒</div>
+    <h3>End Admin Session?</h3>
+    <p>Are you sure you want to logout from the admin dashboard?</p>
+    <div class="logout-actions">
+      <a href="/logout" class="btn-logout-confirm">Yes, Logout</a>
+      <button class="btn-logout-cancel" onclick="hideLogoutModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showLogoutModal() { document.getElementById('logoutModal').classList.add('active'); }
+  function hideLogoutModal() { document.getElementById('logoutModal').classList.remove('active'); }
+  document.getElementById('logoutModal').addEventListener('click', function(e) {
+    if (e.target === this) hideLogoutModal();
+  });
+
+  // Disable browser back/forward navigation
+  history.pushState(null, null, location.href);
+  window.onpopstate = function () {
+    history.pushState(null, null, location.href);
+  };
+</script>
+
+</body>
+</html>

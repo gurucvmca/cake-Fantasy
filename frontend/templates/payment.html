@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Secure Payment — Cake Shop Luxury 💳</title>
+  <link rel="stylesheet" href="/static/shop.css">
+  <style>
+    .payment-container {
+      max-width: 1000px;
+      margin: 60px auto;
+      padding: 0 5%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 40px;
+    }
+    .payment-card {
+      background: var(--glass);
+      backdrop-filter: blur(20px);
+      border-radius: var(--radius);
+      padding: 40px;
+      border: 1px solid var(--glass-border);
+    }
+    .payment-card h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--white);
+      margin-bottom: 25px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .order-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--glass-border);
+    }
+    .order-row .label { color: var(--text-muted); font-weight: 600; }
+    .order-row .value { font-weight: 700; color: var(--white); }
+    .order-row .value.price { color: var(--accent); font-size: 1.2rem; }
+
+    .btn-confirm {
+      width: 100%;
+      padding: 18px;
+      background: linear-gradient(135deg, var(--primary), var(--accent2));
+      color: white;
+      border-radius: 50px;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      margin-top: 25px;
+      border: none;
+      box-shadow: 0 8px 25px rgba(232, 54, 79, 0.3);
+      transition: var(--transition);
+    }
+    .btn-confirm:hover { transform: translateY(-3px); box-shadow: 0 14px 35px rgba(232, 54, 79, 0.45); }
+
+    @media (max-width: 768px) { .payment-container { grid-template-columns: 1fr; } }
+  </style>
+
+</head>
+<body class="payment-page">
+
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="nav-logo">
+      <span class="logo-icon">🍰</span>
+      <span>Cake Shop</span>
+    </div>
+    <div class="nav-right">
+      <a class="nav-logout" href="/logout">Logout</a>
+    </div>
+  </nav>
+
+  <div class="payment-container">
+    <!-- LEFT -->
+    <div class="payment-card">
+      <h2>🧁 Order Review</h2>
+      <div class="order-row">
+        <span class="label">{{ 'Selected Items' if from_cart else 'Artisan Cake' }}</span>
+        <span class="value" style="max-width:200px; text-align:right;">{{ cake }}</span>
+      </div>
+      <div class="order-row">
+        <span class="label">Amount</span>
+        <span class="value price">₹{{ amount }}</span>
+      </div>
+      <div class="order-row">
+        <span class="label">Concierge Delivery</span>
+        <span class="value" style="color:#27ae60;">FREE</span>
+      </div>
+      <div class="order-row" style="margin-top:20px; padding-top:20px; border-top:2px dashed rgba(0,0,0,0.1);">
+        <span class="label" style="font-weight:800; color:var(--primary-dark);">Total Amount</span>
+        <span class="value price" style="font-size:1.8rem;">₹{{ amount }}</span>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div class="payment-card">
+      <h2>💳 Final Step</h2>
+      
+      <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">
+        You will be redirected to our secure Razorpay gateway to complete your purchase.
+      </p>
+
+      <div class="features-list" style="margin-bottom: 30px; display: grid; gap: 10px;">
+        <div style="font-size: 0.85rem; color: #27ae60; font-weight: 700;">🛡️ 256-bit Secure Encryption</div>
+        <div style="font-size: 0.85rem; color: #27ae60; font-weight: 700;">💳 All Cards, UPI & Netbanking Accepted</div>
+      </div>
+
+      <button id="rzp-button" class="btn-confirm" onclick="payNow()">💎 Pay Securely Now</button>
+      
+      <div style="margin-top:20px; text-align:center;">
+        <img src="https://razorpay.com/mobile/static/branding/razorpay-logo.png" alt="Razorpay" style="height: 20px; opacity: 0.6;">
+      </div>
+
+      <!-- Hidden form for Razorpay callback -->
+      <form id="rzpForm" action="/confirm-order" method="post">
+        <input type="hidden" name="razorpay_payment_id" id="rzp_payment_id">
+        <input type="hidden" name="razorpay_order_id" id="rzp_order_id">
+        <input type="hidden" name="razorpay_signature" id="rzp_signature">
+        <input type="hidden" name="cake" value="{{ cake }}">
+        <input type="hidden" name="price" value="{{ amount }}">
+        <input type="hidden" name="from_cart" value="{{ from_cart }}">
+      </form>
+    </div>
+  </div>
+
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <script>
+    function payNow() {
+      const btn = document.getElementById('rzp-button');
+      btn.innerHTML = "🔄 Initializing...";
+      btn.disabled = true;
+
+      fetch('/razorpay/create-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: {{ amount }} })
+      })
+      .then(res => res.json())
+      .then(order => {
+        if (order.error) {
+            alert("Error creating order: " + order.error);
+            btn.innerHTML = "💎 Pay Securely Now";
+            btn.disabled = false;
+            return;
+        }
+
+        var options = {
+          "key": "rzp_test_placeholderID", // This is replaced by your real key in production
+          "amount": order.amount,
+          "currency": "INR",
+          "name": "Cake Shop Luxury",
+          "description": "Premium Artisan Cakes",
+          "order_id": order.id,
+          "handler": function (response){
+              document.getElementById('rzp_payment_id').value = response.razorpay_payment_id;
+              document.getElementById('rzp_order_id').value = response.razorpay_order_id;
+              document.getElementById('rzp_signature').value = response.razorpay_signature;
+              document.getElementById('rzpForm').submit();
+          },
+          "prefill": {
+              "email": "{{ session.get('user') }}",
+              "contact": "9999999999"
+          },
+          "theme": { "color": "#FF2E63" }
+        };
+        var rzp = new Razorpay(options);
+        rzp.open();
+        
+        btn.innerHTML = "💎 Pay Securely Now";
+        btn.disabled = false;
+      })
+      .catch(err => {
+        console.error(err);
+        alert("Failed to reach payment server. Please try again.");
+        btn.innerHTML = "💎 Pay Securely Now";
+        btn.disabled = false;
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cake Fantasy — Fresh Artisan Cakes 🍰</title>
+  <meta name="description" content="Indulge in handcrafted artisan cakes. Freshly baked with premium ingredients.">
+  <link rel="stylesheet" href="/static/shop.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+
+<!-- ===== TOASTS ===== -->
+<div class="toast-container">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="toast {{ category }}">
+          <i class="fas fa-check-circle"></i>
+          <span>{{ message }}</span>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</div>
+
+<!-- ===== NAVBAR ===== -->
+<nav class="navbar">
+  <div class="nav-logo">
+    <span class="logo-icon">🍰</span>
+    <span>Cake Fantasy</span>
+  </div>
+  
+  <ul class="nav-links" id="navLinks">
+    <li><a href="#">Home</a></li>
+    <li><a href="#menu">Menu</a></li>
+    <li><a href="#about">Our Story</a></li>
+  </ul>
+
+  <div class="nav-right">
+    <a href="/cart" class="cart-icon-wrap" title="View Cart">
+      🛒
+      <span class="cart-count">{{ cart_count }}</span>
+    </a>
+    <a class="nav-logout" href="#" onclick="showLogoutModal(); return false;">Logout</a>
+    
+    <!-- Mobile Toggle -->
+    <div class="menu-toggle" onclick="toggleMenu()">
+        <span></span>
+        <span></span>
+        <span></span>
+    </div>
+  </div>
+</nav>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">✨ Artisan Quality</div>
+    <h1>Baking <span>Happiness</span><br>Into Every Slice</h1>
+    <p>Handcrafted premium cakes delivered fresh to your door. Celebrate your special moments with our gourmet flavors.</p>
+    <a href="#menu" class="btn-primary">🛍️ Explore Menu</a>
+  </div>
+  
+  <div class="hero-visual">
+    <img src="https://images.unsplash.com/photo-1464349153735-7db50ed83c84?w=1200&q=80" alt="Assorted Artisan Cakes">
+  </div>
+</section>
+
+<!-- ===== STATS BAR ===== -->
+<div class="stats-bar">
+  <div class="stat">
+    <div class="stat-number">5K+</div>
+    <div class="stat-label">Happy Clients</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">60+</div>
+    <div class="stat-label">Unique Flavors</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">4.9 ★</div>
+    <div class="stat-label">Top Rated</div>
+  </div>
+  <div class="stat">
+    <div class="stat-number">2 Hrs</div>
+    <div class="stat-label">Fast Delivery</div>
+  </div>
+</div>
+
+<!-- ===== PRODUCTS ===== -->
+<section id="menu">
+  <div class="section-header">
+    <div class="hero-badge">Our Collection</div>
+    <h2>Chef's Special Picks 🧁</h2>
+    <p>Every cake is a masterpiece, crafted using only the finest organic ingredients.</p>
+  </div>
+
+
+  <div class="products-grid">
+    {% for cake in cakes %}
+    <div class="product-card">
+      <div class="card-img-wrap">
+        <img src="{{ cake.image }}" alt="{{ cake.name }}"
+             onerror="this.src='https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=600&q=80'">
+        {% if cake.badge %}
+        <span class="card-badge">{{ cake.badge }}</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        <h3>{{ cake.name }}</h3>
+        <p class="card-desc">{{ cake.description[:80] }}...</p>
+        
+        <!-- Weight Toggle -->
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+          <button type="button" class="weight-btn active" data-weight="1" data-price="{{ cake.price }}" onclick="setWeight(this)">1kg</button>
+          {% if cake.price_half %}
+          <button type="button" class="weight-btn" data-weight="0.5" data-price="{{ cake.price_half }}" onclick="setWeight(this)">0.5kg</button>
+          {% endif %}
+        </div>
+
+        <div class="card-price-row">
+          <div class="card-price">₹<span class="price-val">{{ cake.price }}</span></div>
+          <div style="font-size:0.8rem; color:var(--accent2); font-weight:700;">★ 4.9</div>
+        </div>
+
+        <!-- Qty Stepper -->
+        <div class="qty-row">
+          <div class="qty-stepper">
+            <button type="button" onclick="changeQty(this,-1)">−</button>
+            <input type="number" min="1" value="1" class="qty" readonly>
+            <button type="button" onclick="changeQty(this,1)">+</button>
+          </div>
+          <p style="font-size:0.9rem; font-weight:700; color:var(--primary);">Total: ₹<span class="total-val">{{ cake.price }}</span></p>
+        </div>
+
+
+        <!-- Forms -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:20px;">
+            <form action="/cart/add" method="post" onsubmit="syncForm(this)">
+              <input type="hidden" name="cake_id" value="{{ cake._id }}">
+              <input type="hidden" name="cake_name" value="{{ cake.name }}">
+              <input type="hidden" name="price" class="form-price" value="{{ cake.price }}">
+              <input type="hidden" name="weight" class="form-weight" value="1kg">
+              <input type="hidden" name="qty" class="form-qty" value="1">
+              <button type="submit" class="btn-order" style="background:var(--white); color:var(--primary-dark); border:1px solid var(--primary-dark);">🛒 Add</button>
+            </form>
+
+            <form action="/payment" method="get" onsubmit="syncForm(this)">
+              <input type="hidden" name="cake" class="form-cake-full" value="{{ cake.name }} (1kg)">
+              <input type="hidden" name="amount" class="form-total" value="{{ cake.price }}">
+              <button type="submit" class="btn-order">⚡ Buy</button>
+            </form>
+        </div>
+
+      </div>
+    </div>
+    {% else %}
+    <div style="grid-column:1/-1;text-align:center;padding:100px;opacity:0.5;">
+      <div style="font-size:4rem;margin-bottom:20px;">🍰</div>
+      <p>Our oven is heating up. Check back soon for new arrivals!</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- ===== ABOUT ===== -->
+<section id="about" class="about-section">
+  <div>
+    <div class="hero-badge" style="background:rgba(255,255,255,0.1); color:white;">Our Passion</div>
+    <h2 style="font-size:3rem; font-weight:800; margin-bottom:25px;">Baked with Heart ❤️</h2>
+    <p style="font-size:1.1rem; line-height:1.8; opacity:0.9; margin-bottom:30px;">
+        Starting from a small kitchen, we've always believed that a cake is more than just dessert—it's the centerpiece of your most cherished memories. We use farm-fresh milk, organic fruits, and premium cocoa to ensure every bite is perfection.
+    </p>
+    <a href="#menu" class="btn-primary" style="background:white; color:var(--primary-dark);">Explore Our Flavors</a>
+  </div>
+  
+  <div class="about-features">
+    <div class="feature-box">
+      <div class="icon">🌿</div>
+      <h4>Organic</h4>
+      <p>100% natural ingredients</p>
+    </div>
+    <div class="feature-box">
+      <div class="icon">🚀</div>
+      <h4>Express</h4>
+      <p>Delivered in 2 hours</p>
+    </div>
+    <div class="feature-box">
+      <div class="icon">🎨</div>
+      <h4>Custom</h4>
+      <p>Designed for you</p>
+    </div>
+    <div class="feature-box">
+      <div class="icon">🛡️</div>
+      <h4>Safe</h4>
+      <p>Hygienically baked</p>
+    </div>
+  </div>
+</section>
+
+<!-- ===== FOOTER ===== -->
+<footer class="footer">
+  <div class="footer-logo">🍰 Cake Fantasy Luxury</div>
+  <p>Crafting sweet moments since 2026. Handcrafted with love in every bite.</p>
+  
+  <div style="display:flex; flex-direction:column; gap:12px; margin-top:30px; align-items:center;">
+    <a href="/policy/privacy" style="color:var(--text-muted); font-weight:600; font-size:0.85rem; text-decoration:none;">Privacy Policy</a>
+    <a href="/policy/terms" style="color:var(--text-muted); font-weight:600; font-size:0.85rem; text-decoration:none;">Terms & Conditions</a>
+    <a href="/policy/refund" style="color:var(--text-muted); font-weight:600; font-size:0.85rem; text-decoration:none;">Cancellation / Refund Policy</a>
+    <a href="/policy/shipping" style="color:var(--text-muted); font-weight:600; font-size:0.85rem; text-decoration:none;">Shipping Policy</a>
+    <a href="/policy/contact" style="color:var(--text-muted); font-weight:600; font-size:0.85rem; text-decoration:none;">Contact Us</a>
+  </div>
+
+  <div style="margin-top:25px; font-size:0.75rem; opacity:0.4;">© 2026 Cake Fantasy Luxury. All rights reserved.</div>
+</footer>
+
+
+<style>
+  .weight-btn {
+    padding: 6px 16px; border-radius: 8px; border: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.05); color: var(--text-muted);
+    font-size: 0.8rem; font-weight: 700; cursor: pointer; transition: 0.2s;
+  }
+  .weight-btn.active {
+    background: var(--primary); color: white; border-color: var(--primary);
+  }
+</style>
+
+
+<!-- WhatsApp Floating Button -->
+<a href="https://wa.me/919380455644?text=Hi, I want to order a cake" class="whatsapp-btn" id="whatsappBtn" target="_blank">
+  <i class="fab fa-whatsapp"></i>
+  <span class="wa-tooltip">Chat with us on WhatsApp</span>
+</a>
+
+<script>
+  // Show WhatsApp button after 3 seconds
+  setTimeout(() => {
+    document.getElementById('whatsappBtn').classList.add('show');
+  }, 3000);
+</script>
+
+
+<script>
+  function toggleMenu() {
+      document.getElementById('navLinks').classList.toggle('active');
+  }
+
+  function setWeight(btn) {
+    const card = btn.closest('.product-card');
+    card.querySelectorAll('.weight-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    
+    const price = parseInt(btn.dataset.price);
+    card.querySelector('.price-val').textContent = price;
+    updateTotal(card);
+  }
+
+  function changeQty(btn, delta) {
+    const card  = btn.closest('.product-card');
+    const input = card.querySelector('.qty');
+    let val = Math.max(1, (parseInt(input.value) || 1) + delta);
+    input.value = val;
+    updateTotal(card);
+  }
+
+  function updateTotal(card) {
+    const price = parseInt(card.querySelector('.price-val').textContent);
+    const qty = parseInt(card.querySelector('.qty').value);
+    card.querySelector('.total-val').textContent = price * qty;
+  }
+
+  function syncForm(form) {
+    const card = form.closest('.product-card');
+    const weightBtn = card.querySelector('.weight-btn.active');
+    const weight = weightBtn.textContent;
+    const price = weightBtn.dataset.price;
+    const qty = card.querySelector('.qty').value;
+    const cakeName = card.querySelector('h3').textContent;
+    const total = price * qty;
+
+    if (form.action.includes('cart/add')) {
+      form.querySelector('.form-price').value = price;
+      form.querySelector('.form-weight').value = weight;
+      form.querySelector('.form-qty').value = qty;
+    } else {
+      form.querySelector('.form-cake-full').value = `${cakeName} (${weight})`;
+      form.querySelector('.form-total').value = total;
+    }
+  }
+</script>
+
+<!-- Logout Confirmation Modal -->
+<div id="logoutModal">
+  <div class="logout-box">
+    <div class="logout-icon">👋</div>
+    <h3>Leaving So Soon?</h3>
+    <p>Are you sure you want to logout? Your cart items will be cleared.</p>
+    <div class="logout-actions">
+      <a href="/logout" class="btn-logout-confirm">Yes, Logout</a>
+      <button class="btn-logout-cancel" onclick="hideLogoutModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showLogoutModal() { document.getElementById('logoutModal').classList.add('active'); }
+  function hideLogoutModal() { document.getElementById('logoutModal').classList.remove('active'); }
+  document.getElementById('logoutModal').addEventListener('click', function(e) {
+    if (e.target === this) hideLogoutModal();
+  });
+
+  // Disable browser back/forward navigation
+  history.pushState(null, null, location.href);
+  window.onpopstate = function () {
+    history.pushState(null, null, location.href);
+  };
+</script>
+
+</body>
+
+</html>
