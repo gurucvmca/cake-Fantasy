@@ -329,7 +329,8 @@ def confirm_order():
             "price":   price,
             "payment": "Razorpay",
             "rzp_payment_id": rzp_payment_id,
-            "rzp_order_id": rzp_order_id
+            "rzp_order_id": rzp_order_id,
+            "status":  "Pending"
         })
         display_payment = "Razorpay Secure"
     
@@ -380,7 +381,7 @@ def admin():
         c["_id"] = str(c["_id"])
     for o in all_orders:
         o["_id"] = str(o["_id"])
-    total_revenue = sum(int(o.get("price", 0)) for o in all_orders)
+    total_revenue = sum(int(o.get("price", 0)) for o in all_orders if o.get("status") != "Rejected")
     return render_template("admin.html",
         cakes=all_cakes, orders=all_orders,
         total_orders=len(all_orders), total_cakes=len(all_cakes),
@@ -426,6 +427,20 @@ def admin_delete_cake(cake_id):
     if not is_admin():
         return redirect("/")
     cakes.delete_one({"_id": ObjectId(cake_id)})
+    return redirect(url_for("admin"))
+
+@app.route("/admin/order/accept/<order_id>", methods=["POST"])
+def admin_accept_order(order_id):
+    if not is_admin():
+        return redirect("/")
+    orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "Accepted"}})
+    return redirect(url_for("admin"))
+
+@app.route("/admin/order/reject/<order_id>", methods=["POST"])
+def admin_reject_order(order_id):
+    if not is_admin():
+        return redirect("/")
+    orders.update_one({"_id": ObjectId(order_id)}, {"$set": {"status": "Rejected"}})
     return redirect(url_for("admin"))
 
 # ---------------- MAIN ----------------
