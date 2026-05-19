@@ -28,6 +28,9 @@ app.secret_key = os.environ.get("SECRET_KEY", "cakeshop_secret_default_2026")
 app.config["UPLOAD_FOLDER"] = UPLOAD_FOLDER
 app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024  # 8 MB max upload
 
+# This token changes when the backend restarts. Stored in sessions to invalidate stale client cookies.
+SERVER_SESSION_TOKEN = os.urandom(16).hex()
+
 # ---- SECURE SESSION CONFIG ----
 app.config["SESSION_COOKIE_HTTPONLY"] = True      # Prevent JS access to cookies
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"     # CSRF protection
@@ -96,6 +99,33 @@ def is_admin():
 def cart_count():
     return sum(item["qty"] for item in session.get("cart", []))
 
+
+def get_saved_cart(email):
+    """Return the saved cart stored in the user's MongoDB document."""
+    if not email:
+        return []
+    user = users.find_one({"email": email}, {"cart": 1})
+    return user.get("cart", []) if user else []
+
+
+def save_cart_for_user(email, cart):
+    """Persist the current cart into the user's MongoDB document."""
+    if not email:
+        return
+    users.update_one({"email": email}, {"$set": {"cart": cart}})
+
+
+def merge_cart_items(saved_cart, session_cart):
+    """Merge existing saved cart with current session cart by cake id."""
+    merged = {item["id"]: item.copy() for item in saved_cart}
+    for item in session_cart:
+        if item["id"] in merged:
+            merged[item["id"]]["qty"] += item["qty"]
+            merged[item["id"]]["total"] = merged[item["id"]]["qty"] * merged[item["id"]]["price"]
+        else:
+            merged[item["id"]] = item.copy()
+    return list(merged.values())
+
 # ---------------- SECURITY MIDDLEWARE ----------------
 
 @app.after_request
@@ -108,7 +138,9 @@ def add_no_cache_headers(response):
 
 @app.before_request
 def make_session_permanent():
-    """Ensure every session uses the configured expiry time."""
+    """Ensure every session uses the configured expiry time and clear stale server sessions."""
+    if session.get("server_session_token") != SERVER_SESSION_TOKEN:
+        session.clear()
     session.permanent = True
 
 # ---------------- AUTH ROUTES ----------------
@@ -124,28 +156,53 @@ def login_page():
 
 @app.route("/signup", methods=["POST"])
 def signup():
-    email    = request.form.get("email", "").strip()
+    email    = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "").strip()
     if not email or not password:
         return "Missing email or password"
-    if users.find_one({"email": email}):
+    print(f"[DEBUG] Signup attempt for email={email}")
+    existing = users.find_one({"email": email})
+    if existing:
+        print(f"[DEBUG] Signup blocked — user exists: {email}")
         flash("User already exists. Please login.", "error")
         return redirect(url_for("login_page"))
     
     hashed_pw = generate_password_hash(password)
-    users.insert_one({"email": email, "password": hashed_pw, "role": "customer"})
-    flash("Account created! Please login.", "success")
-    return redirect(url_for("login_page"))
+    users.insert_one({"email": email, "password": hashed_pw, "role": "customer", "cart": []})
+    session["user"] = email
+    session["role"] = "customer"
+    session["server_session_token"] = SERVER_SESSION_TOKEN
+    session["cart"] = []
+    session.modified = True
+    flash("Account created! You are now logged in.", "success")
+    return redirect(url_for("welcome"))
 
 @app.route("/login", methods=["POST"])
 def login():
-    email    = request.form.get("email", "").strip()
+    email    = request.form.get("email", "").strip().lower()
     password = request.form.get("password", "").strip()
+    print(f"[DEBUG] Login attempt for email={email}")
     user = users.find_one({"email": email})
-    if user and check_password_hash(user.get("password", ""), password):
+    if not user:
+        print(f"[DEBUG] Login failed — no such user: {email}")
+    else:
+        print(f"[DEBUG] User found, checking password for: {email}")
+    pw_ok = user and check_password_hash(user.get("password", ""), password)
+    print(f"[DEBUG] Password check for {email}: {bool(pw_ok)}")
+    if pw_ok:
+        print(f"[DEBUG] Login successful for: {email}")
         session["user"] = email
         session["role"] = user.get("role", "customer")
-        session.setdefault("cart", [])
+        session["server_session_token"] = SERVER_SESSION_TOKEN
+        saved_cart = get_saved_cart(email)
+        current_cart = session.get("cart", [])
+        if current_cart and saved_cart:
+            merged_cart = merge_cart_items(saved_cart, current_cart)
+        else:
+            merged_cart = saved_cart or current_cart or []
+        session["cart"] = merged_cart
+        session.modified = True
+        save_cart_for_user(email, merged_cart)
         if session["role"] == "admin":
             return redirect(url_for("admin"))
         return redirect(url_for("welcome"))
@@ -178,6 +235,7 @@ def cart_add():
         return redirect("/")
     cake_id   = request.form.get("cake_id")
     cake_name = request.form.get("cake_name")
+    image     = request.form.get("image", "")
     price     = int(request.form.get("price", 0))
     qty       = int(request.form.get("qty", 1))
     cart = session.get("cart", [])
@@ -187,10 +245,12 @@ def cart_add():
             item["total"] = item["qty"] * item["price"]
             session["cart"] = cart
             session.modified = True
+            save_cart_for_user(session.get("user"), cart)
             return redirect(url_for("welcome"))
-    cart.append({"id": cake_id, "name": cake_name, "price": price, "qty": qty, "total": price * qty})
+    cart.append({"id": cake_id, "name": cake_name, "price": price, "qty": qty, "total": price * qty, "image": image})
     session["cart"] = cart
     session.modified = True
+    save_cart_for_user(session.get("user"), cart)
     flash("🍰 Added to cart successfully!", "success")
     return redirect(url_for("welcome"))
 
@@ -205,6 +265,7 @@ def cart_update():
             item["total"] = item["qty"] * item["price"]
     session["cart"] = cart
     session.modified = True
+    save_cart_for_user(session.get("user"), cart)
     return redirect(url_for("cart"))
 
 @app.route("/cart/remove", methods=["POST"])
@@ -212,6 +273,7 @@ def cart_remove():
     cake_id = request.form.get("cake_id")
     session["cart"] = [i for i in session.get("cart", []) if i["id"] != cake_id]
     session.modified = True
+    save_cart_for_user(session.get("user"), session.get("cart", []))
     return redirect(url_for("cart"))
 
 @app.route("/cart")
@@ -229,7 +291,7 @@ def cart_checkout():
         return redirect(url_for("cart"))
     subtotal  = sum(i["total"] for i in cart_items)
     cake_list = ", ".join(f"{i['name']}×{i['qty']}" for i in cart_items)
-    return render_template("payment.html", cake=cake_list, amount=subtotal, from_cart=True)
+    return render_template("payment.html", cake=cake_list, amount=subtotal, from_cart=True, rzp_key_id=RZP_KEY_ID)
 
 # ---------------- PAYMENT / ORDER ROUTES ----------------
 
@@ -237,41 +299,45 @@ def cart_checkout():
 def payment():
     cake   = request.args.get("cake")
     amount = request.args.get("amount")
-    return render_template("payment.html", cake=cake, amount=amount, from_cart=False)
+    return render_template("payment.html", cake=cake, amount=amount, from_cart=False, rzp_key_id=RZP_KEY_ID)
 
 @app.route("/confirm-order", methods=["POST"])
 def confirm_order():
-    # Razorpay payment verification
-    rzp_payment_id = request.form.get("razorpay_payment_id")
-    rzp_order_id   = request.form.get("razorpay_order_id")
-    rzp_signature  = request.form.get("razorpay_signature")
+    payment_method = request.form.get("payment_method", "Razorpay")
+    cake           = request.form.get("cake")
+    price          = request.form.get("price")
+    from_cart      = request.form.get("from_cart") == "True"
     
-    cake       = request.form.get("cake")
-    price      = request.form.get("price")
-    from_cart  = request.form.get("from_cart") == "True"
-    
-    params_dict = {
-        'razorpay_order_id': rzp_order_id,
-        'razorpay_payment_id': rzp_payment_id,
-        'razorpay_signature': rzp_signature
-    }
-
-    # Verify signature (only if using live keys, for test placeholders we skip actual verification or let it pass)
-    # In production, use: rzp_client.utility.verify_payment_signature(params_dict)
-    
-    orders.insert_one({
-        "user":    session.get("user", "guest"),
-        "cake":    cake,
-        "price":   price,
-        "payment": "Razorpay",
-        "rzp_payment_id": rzp_payment_id,
-        "rzp_order_id": rzp_order_id
-    })
+    if payment_method == "COD":
+        orders.insert_one({
+            "user":    session.get("user", "guest"),
+            "cake":    cake,
+            "price":   price,
+            "payment": "Cash on Delivery",
+            "status":  "Pending Delivery"
+        })
+        display_payment = "Cash on Delivery (COD)"
+    else:
+        # Razorpay payment verification
+        rzp_payment_id = request.form.get("razorpay_payment_id")
+        rzp_order_id   = request.form.get("razorpay_order_id")
+        rzp_signature  = request.form.get("razorpay_signature")
+        
+        orders.insert_one({
+            "user":    session.get("user", "guest"),
+            "cake":    cake,
+            "price":   price,
+            "payment": "Razorpay",
+            "rzp_payment_id": rzp_payment_id,
+            "rzp_order_id": rzp_order_id
+        })
+        display_payment = "Razorpay Secure"
     
     if from_cart:
         session["cart"] = []
         session.modified = True
-    return render_template("success.html", cake=cake, price=price, payment="Razorpay Secure")
+        save_cart_for_user(session.get("user"), [])
+    return render_template("success.html", cake=cake, price=price, payment=display_payment)
 
 @app.route("/razorpay/create-order", methods=["POST"])
 def rzp_create_order():

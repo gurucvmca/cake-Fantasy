@@ -139,6 +139,7 @@
             <form action="/cart/add" method="post" onsubmit="syncForm(this)">
               <input type="hidden" name="cake_id" value="{{ cake._id }}">
               <input type="hidden" name="cake_name" value="{{ cake.name }}">
+              <input type="hidden" name="image" value="{{ cake.image }}">
               <input type="hidden" name="price" class="form-price" value="{{ cake.price }}">
               <input type="hidden" name="weight" class="form-weight" value="1kg">
               <input type="hidden" name="qty" class="form-qty" value="1">

@@ -98,25 +98,38 @@
 
     <!-- RIGHT -->
     <div class="payment-card">
-      <h2>💳 Final Step</h2>
+      <h2>💳 Payment Options</h2>
       
-      <p style="margin-bottom: 20px; color: var(--text-muted); font-size: 0.9rem;">
-        You will be redirected to our secure Razorpay gateway to complete your purchase.
+      <p style="margin-bottom: 25px; color: var(--text-muted); font-size: 0.9rem;">
+        Select your preferred method below to complete your order.
       </p>
 
-      <div class="features-list" style="margin-bottom: 30px; display: grid; gap: 10px;">
-        <div style="font-size: 0.85rem; color: #27ae60; font-weight: 700;">🛡️ 256-bit Secure Encryption</div>
-        <div style="font-size: 0.85rem; color: #27ae60; font-weight: 700;">💳 All Cards, UPI & Netbanking Accepted</div>
+      <!-- Option 1: Pay Online (Razorpay) -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); padding: 25px; border-radius: var(--radius-sm); margin-bottom: 20px; text-align: left;">
+        <h3 style="color: var(--white); font-size: 1.1rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">💻 Pay Online</h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 15px; line-height: 1.4;">Fast and secure transactions via Cards, UPI, Netbanking, or Wallets.</p>
+        <button id="rzp-button" class="btn-confirm" onclick="payNow()" style="margin-top: 0; background: linear-gradient(135deg, var(--primary), var(--accent2));">💎 Pay Securely Online</button>
+        <div style="margin-top:15px; text-align:center;">
+          <img src="https://razorpay.com/mobile/static/branding/razorpay-logo.png" alt="Razorpay" style="height: 16px; opacity: 0.6;">
+        </div>
       </div>
 
-      <button id="rzp-button" class="btn-confirm" onclick="payNow()">💎 Pay Securely Now</button>
-      
-      <div style="margin-top:20px; text-align:center;">
-        <img src="https://razorpay.com/mobile/static/branding/razorpay-logo.png" alt="Razorpay" style="height: 20px; opacity: 0.6;">
+      <!-- Option 2: Cash on Delivery (COD) -->
+      <div style="background: rgba(255,255,255,0.02); border: 1px solid var(--glass-border); padding: 25px; border-radius: var(--radius-sm); text-align: left;">
+        <h3 style="color: var(--white); font-size: 1.1rem; margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">🚚 Cash on Delivery</h3>
+        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 15px; line-height: 1.4;">Pay with cash or digital options when your freshly baked cake arrives.</p>
+        <form action="/confirm-order" method="post">
+          <input type="hidden" name="payment_method" value="COD">
+          <input type="hidden" name="cake" value="{{ cake }}">
+          <input type="hidden" name="price" value="{{ amount }}">
+          <input type="hidden" name="from_cart" value="{{ from_cart }}">
+          <button type="submit" class="btn-confirm" style="margin-top: 0; background: linear-gradient(135deg, #2ecc71, #27ae60); box-shadow: 0 8px 25px rgba(39,174,96,0.3);">🤝 Place COD Order</button>
+        </form>
       </div>
 
       <!-- Hidden form for Razorpay callback -->
       <form id="rzpForm" action="/confirm-order" method="post">
+        <input type="hidden" name="payment_method" value="Razorpay">
         <input type="hidden" name="razorpay_payment_id" id="rzp_payment_id">
         <input type="hidden" name="razorpay_order_id" id="rzp_order_id">
         <input type="hidden" name="razorpay_signature" id="rzp_signature">
@@ -149,7 +162,7 @@
         }
 
         var options = {
-          "key": "rzp_test_placeholderID", // This is replaced by your real key in production
+          "key": "{{ rzp_key_id }}", // Provided by server from environment
           "amount": order.amount,
           "currency": "INR",
           "name": "Cake Shop Luxury",

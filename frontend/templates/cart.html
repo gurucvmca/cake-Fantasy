@@ -118,7 +118,7 @@
     <div class="panel-title">Your Selection ({{ cart|length }} item{{ 's' if cart|length != 1 else '' }})</div>
     {% for item in cart %}
     <div class="cart-item">
-      <img src="https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=200&q=80" class="cart-item-img" alt="{{ item.name }}">
+      <img src="{{ item.image }}" class="cart-item-img" alt="{{ item.name }}" onerror="this.src='https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=200&q=80'">
       <div class="cart-item-info">
         <h4>{{ item.name }}</h4>
         <div class="unit-price">₹{{ item.price }} / kg</div>
