@@ -120,23 +120,25 @@
     <div class="cart-item">
       <img src="{{ item.image }}" class="cart-item-img" alt="{{ item.name }}" onerror="this.src='https://images.unsplash.com/photo-1563729784474-d77dbb933a9e?w=200&q=80'">
       <div class="cart-item-info">
-        <h4>{{ item.name }}</h4>
-        <div class="unit-price">₹{{ item.price }} / kg</div>
+        <h4>{{ item.name }} {% if item.weight and item.weight != '1kg' %}<span class="weight-badge" style="font-size: 0.75rem; background: rgba(255, 255, 255, 0.1); padding: 3px 8px; border-radius: 20px; margin-left: 6px; font-weight: 700; color: var(--accent);">{{ item.weight }}</span>{% endif %}</h4>
+        <div class="unit-price">₹{{ item.price }} / {{ item.weight or '1kg' }}</div>
         <form action="/cart/update" method="post" style="margin-top:10px;">
           <input type="hidden" name="cake_id" value="{{ item.id }}">
+          <input type="hidden" name="weight" value="{{ item.weight or '1kg' }}">
           <div style="display:flex; align-items:center; gap:8px;">
             <div class="cart-item-qty">
               <button type="submit" name="qty" value="{{ item.qty - 1 if item.qty > 1 else 1 }}">−</button>
               <span class="qty-display">{{ item.qty }}</span>
               <button type="submit" name="qty" value="{{ item.qty + 1 }}">+</button>
             </div>
-            <span style="font-size:0.75rem; color:var(--text-muted);">kg</span>
+            <span style="font-size:0.75rem; color:var(--text-muted);">{{ item.weight or '1kg' }}</span>
           </div>
         </form>
       </div>
       <div class="cart-item-total">₹{{ item.total }}</div>
       <form action="/cart/remove" method="post">
         <input type="hidden" name="cake_id" value="{{ item.id }}">
+        <input type="hidden" name="weight" value="{{ item.weight or '1kg' }}">
         <button type="submit" class="btn-remove" title="Remove">✕</button>
       </form>
     </div>

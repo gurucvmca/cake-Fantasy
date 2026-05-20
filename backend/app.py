@@ -126,14 +126,17 @@ def save_cart_for_user(email, cart):
 
 
 def merge_cart_items(saved_cart, session_cart):
-    """Merge existing saved cart with current session cart by cake id."""
-    merged = {item["id"]: item.copy() for item in saved_cart}
+    """Merge existing saved cart with current session cart by cake id and weight."""
+    def get_key(item):
+        return f"{item['id']}_{item.get('weight', '1kg')}"
+    merged = {get_key(item): item.copy() for item in saved_cart}
     for item in session_cart:
-        if item["id"] in merged:
-            merged[item["id"]]["qty"] += item["qty"]
-            merged[item["id"]]["total"] = merged[item["id"]]["qty"] * merged[item["id"]]["price"]
+        key = get_key(item)
+        if key in merged:
+            merged[key]["qty"] += item["qty"]
+            merged[key]["total"] = merged[key]["qty"] * merged[key]["price"]
         else:
-            merged[item["id"]] = item.copy()
+            merged[key] = item.copy()
     return list(merged.values())
 
 # ---------------- SECURITY MIDDLEWARE ----------------
@@ -248,16 +251,17 @@ def cart_add():
     image     = request.form.get("image", "")
     price     = int(request.form.get("price", 0))
     qty       = int(request.form.get("qty", 1))
+    weight    = request.form.get("weight", "1kg").strip()
     cart = session.get("cart", [])
     for item in cart:
-        if item["id"] == cake_id:
+        if item["id"] == cake_id and item.get("weight", "1kg") == weight:
             item["qty"] += qty
             item["total"] = item["qty"] * item["price"]
             session["cart"] = cart
             session.modified = True
             save_cart_for_user(session.get("user"), cart)
             return redirect(url_for("welcome"))
-    cart.append({"id": cake_id, "name": cake_name, "price": price, "qty": qty, "total": price * qty, "image": image})
+    cart.append({"id": cake_id, "name": cake_name, "price": price, "qty": qty, "total": price * qty, "image": image, "weight": weight})
     session["cart"] = cart
     session.modified = True
     save_cart_for_user(session.get("user"), cart)
@@ -267,10 +271,11 @@ def cart_add():
 @app.route("/cart/update", methods=["POST"])
 def cart_update():
     cake_id = request.form.get("cake_id")
+    weight  = request.form.get("weight", "1kg").strip()
     qty     = int(request.form.get("qty", 1))
     cart = session.get("cart", [])
     for item in cart:
-        if item["id"] == cake_id:
+        if item["id"] == cake_id and item.get("weight", "1kg") == weight:
             item["qty"]   = max(1, qty)
             item["total"] = item["qty"] * item["price"]
     session["cart"] = cart
@@ -281,7 +286,8 @@ def cart_update():
 @app.route("/cart/remove", methods=["POST"])
 def cart_remove():
     cake_id = request.form.get("cake_id")
-    session["cart"] = [i for i in session.get("cart", []) if i["id"] != cake_id]
+    weight  = request.form.get("weight", "1kg").strip()
+    session["cart"] = [i for i in session.get("cart", []) if not (i["id"] == cake_id and i.get("weight", "1kg") == weight)]
     session.modified = True
     save_cart_for_user(session.get("user"), session.get("cart", []))
     return redirect(url_for("cart"))
@@ -300,7 +306,7 @@ def cart_checkout():
     if not cart_items:
         return redirect(url_for("cart"))
     subtotal  = sum(i["total"] for i in cart_items)
-    cake_list = ", ".join(f"{i['name']}×{i['qty']}" for i in cart_items)
+    cake_list = ", ".join(f"{i['name']} ({i.get('weight', '1kg')})×{i['qty']}" for i in cart_items)
     return render_template("payment.html", cake=cake_list, amount=subtotal, from_cart=True, rzp_key_id=RZP_KEY_ID)
 
 # ---------------- PAYMENT / ORDER ROUTES ----------------
