@@ -9,7 +9,8 @@ from datetime import timedelta
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv()
+dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(dotenv_path=dotenv_path)
 
 # ---------------- PATH CONFIG ----------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -45,13 +46,22 @@ users  = db["users"]
 orders = db["orders"]
 cakes  = db["cakes"]
 
+# Log database connection status clearly
+if "mongodb+srv://" in MONGO_URI or "@" in MONGO_URI:
+    # Safely mask username/password in output
+    import re
+    masked_uri = re.sub(r'mongodb\+srv://([^:]+):([^@]+)@', r'mongodb+srv://\1:******@', MONGO_URI)
+    print(f"[OK] Connected to MongoDB Atlas Cloud Database: {masked_uri}")
+else:
+    print("[WARNING] Connected to Local MongoDB Fallback Database (mongodb://127.0.0.1:27017/)")
+
 
 # ---------------- RAZORPAY ----------------
 RZP_KEY_ID = os.environ.get("RAZORPAY_KEY_ID", "rzp_test_placeholderID")
 RZP_KEY_SECRET = os.environ.get("RAZORPAY_KEY_SECRET", "rzp_test_placeholderSecret")
 rzp_client = razorpay.Client(auth=(RZP_KEY_ID, RZP_KEY_SECRET))
 
-print("[OK] MongoDB connected & Razorpay Initialized")
+print("[OK] Razorpay Initialized")
 
 # Seed admin account if not present
 if not users.find_one({"email": "admin@cakeshop.com"}):
